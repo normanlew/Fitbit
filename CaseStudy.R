@@ -336,37 +336,45 @@ ggplot(data = dailyActivity) +
   geom_point(mapping = aes(x = TotalSteps, y = SedentaryMinutes)) +
   facet_wrap(~Id)
 
+# Plot the relationship between TotalDistance and SedentaryMinutes
 ggplot(data = dailyActivity) +
-  geom_point(mapping = aes(x = TotalSteps, y = SedentaryMinutes)) +
-  facet_wrap(~Id)
+  geom_point(mapping = aes(x = TotalDistance, y = SedentaryMinutes))
 
+
+# Plot the relationship between TotalDistance and SedentaryMinutes per Id
 ggplot(data = dailyActivity) +
   geom_point(mapping = aes(x = TotalDistance, y = SedentaryMinutes)) +
   facet_wrap(~Id)
 
-#####################
+# Plot the rleationship between the sum_TotalSteps and sum_calories
 ggplot(data = summary_stats_by_id) +
   geom_point(mapping = aes(x = sum_TotalSteps, y = sum_calories))
 
-#####################
+# Plot the rleationship between sum_TotalDistance and sum_calories
 ggplot(data = summary_stats_by_id) +
   geom_point(mapping = aes(x = sum_TotalDistance, y = sum_calories))
 
 
 ##################### SLEEP ############################
+
+# Store the sleepDay_Merged.csv file in a dataframe
 sleepDay_merged <- read.csv("sleepDay_Merged.csv")
 
 str(sleepDay_merged)
 
+# Convert character representation of date and time to POSIXlt
 sleepDay_merged <- sleepDay_merged %>% 
   mutate(SleepDay = strptime(SleepDay, "%m/%d/%Y %H:%M:%S"))
 
+# Convert SleepDay to Date format
 sleepDay_merged <- sleepDay_merged %>% 
   mutate(SleepDay = as.Date(SleepDay))
 
+# Add a column calculating sleep percentage
 sleepDay_merged <- sleepDay_merged %>% 
   mutate(sleepPercentage = TotalMinutesAsleep / TotalTimeInBed)
 
+# Create a new dataframe that shows summary stats per Id
 sleep_stats_by_id <- sleepDay_merged %>%
   group_by(Id) %>%
   summarize(
@@ -380,17 +388,28 @@ sleep_stats_by_id <- sleepDay_merged %>%
             min_TotalTimeInBed  = min(TotalTimeInBed , na.rm = TRUE),
             sum_TotalTimeInBed  = sum(TotalTimeInBed , na.rm = TRUE),
             )
-  
+
+# Add a column for avg_percentage_asleep_in_bed
 sleep_stats_by_id <- sleep_stats_by_id %>%
   mutate(avg_percentage_asleep_in_bed = sum_TotalMinutesAsleep / sum_TotalTimeInBed)
 
-all_stats = cbind(summary_stats_by_id, sleep_stats_by_id)
+#all_stats = cbind(summary_stats_by_id, sleep_stats_by_id)
 
+# A count of the percentage of time asleep while in bed
 ggplot(sleep_stats_by_id) +
   geom_histogram(mapping = aes(x = avg_percentage_asleep_in_bed))
 
+# Another histogram for a count of the percentage of time asleep while in bed
+result <- hist(sleep_stats_by_id$avg_percentage_asleep_in_bed,
+               main = "Proportion of Time Asleep While In Bed",
+               xlab = "Percentage of Time Asleep",
+               ylab = "Number of People",
+               col = "Cyan")
+
+### Create a dataframe for minuteSleep_merged.csv"
 minuteSleep_merged <- read.csv("minuteSleep_merged.csv")
 
+# Calculate percentage spent in each sleep stage for each Id
 minuteSleep_stats <- minuteSleep_merged %>%
   group_by(Id) %>% 
   summarize(sum_stage1 = sum(value == 1), 
@@ -402,25 +421,26 @@ minuteSleep_stats <- minuteSleep_stats %>%
          percentage_stage2 = sum_stage2 / (sum_stage1 + sum_stage2 + sum_stage3),
          percentage_stage3 = sum_stage3 / (sum_stage1 + sum_stage2 + sum_stage3))
   
-ggplot(data = minuteSleep_stats) +
-  geom_bar(mapping = aes(x = distribution_channel,fill=deposit_type ))
+# ggplot(data = minuteSleep_stats) +
+# geom_bar(mapping = aes(x = distribution_channel,fill=deposit_type ))
 
-minuteSleep_stats_long <- gather(minuteSleep_stats, stage, percent, percentage_stage1:percentage_stage3)
+# minuteSleep_stats_long <- gather(minuteSleep_stats, stage, percent, percentage_stage1:percentage_stage3)
 
-minuteSleep_stats_long <- minuteSleep_stats_long %>% 
-  select(Id, stage, percent)
+# minuteSleep_stats_long <- minuteSleep_stats_long %>%
+#   select(Id, stage, percent)
+# 
+# ggplot(data = minuteSleep_stats_long) +
+#   geom_bar(mapping = aes(x = stage)) +
+#   facet_grid(~Id)
+# 
+# ggplot(data = minuteSleep_stats_long) +
+#   geom_histogram(mapping = aes(x = stage)) +
+#   facet_wrap(~Id)
 
-ggplot(data = minuteSleep_stats_long) +
-  geom_bar(mapping = aes(x = stage)) +
-  facet_grid(~Id)
+# ggplot(data = all_stats) +
+#   geom_histogram(mapping = aes(x = avg_percentage_asleep_in_bed))
 
-ggplot(data = minuteSleep_stats_long) +
-  geom_histogram(mapping = aes(x = stage)) +
-  facet_wrap(~Id)
-
-ggplot(data = all_stats) +
-  geom_histogram(mapping = aes(x = avg_percentage_asleep_in_bed))
-
+# Show breakdown of minutes spent in each sleep stage
 minuteSleep_stats_long2 <- gather(minuteSleep_stats, stage, num_minutes, sum_stage1:sum_stage3)
 
 minuteSleep_stats_long2 <- minuteSleep_stats_long2 %>% 
@@ -429,19 +449,23 @@ minuteSleep_stats_long2 <- minuteSleep_stats_long2 %>%
 minuteSleep_stats_long2 <- minuteSleep_stats_long2 %>%
   mutate(stage = recode(stage, sum_stage1 = 'Stage_1', sum_stage2 = 'Stage_2', sum_stage3 =  'Stage_3' ))
 
-ggplot(data = minuteSleep_stats_long2) +
-  geom_bar(mapping = aes (x = stage)) +
-  facet_wrap(~Id)
-
-ggplot(data = minuteSleep_stats_long2) +
-  geom_histogram(mapping = aes (x = num_minutes)) +
-  facet_wrap(~Id)
+# ggplot(data = minuteSleep_stats_long2) +
+#   geom_bar(mapping = aes (x = stage)) +
+#   facet_wrap(~Id)
+# 
+# ggplot(data = minuteSleep_stats_long2) +
+#   geom_histogram(mapping = aes (x = num_minutes)) +
+#   facet_wrap(~Id)
 
 ggplot(data = minuteSleep_stats_long2, aes (x = stage, y = num_minutes)) +
   geom_bar(stat = "identity") +
-  theme(axis.text.x = element_text(angle = 315)) +
+  theme(axis.text.x = element_text(angle = 270)) +
   facet_wrap(~Id)
 
+ggplot(data = minuteSleep_stats_long2) +
+  geom_col(mapping = aes(x = stage, y = num_minutes))
+
+# Show  breakdown of percentage of sleep spent in each sleep stage
 minuteSleep_stats_percentages_long <- gather(minuteSleep_stats, stage, percentage, percentage_stage1:percentage_stage3)
 
 minuteSleep_stats_percentages_long <- minuteSleep_stats_percentages_long %>%
@@ -452,12 +476,15 @@ minuteSleep_stats_percentages_long <- minuteSleep_stats_percentages_long %>%
 
 ggplot(data = minuteSleep_stats_percentages_long, aes (x = stage, y = percentage)) +
   geom_bar(stat = "identity") +
-  theme(axis.text.x = element_text(angle = 315)) +
+  theme(axis.text.x = element_text(angle = 270)) +
   facet_wrap(~Id)
 
 
+
+
 ### For each ID, create two different bar graphs, one showing breakdown of distance types, 
-### the other showing breakdown of activity types
+### the other showing breakdown of activity types.
+### Create new dataframe taking data from summary_stats_by_id in percentage form
 summary_stats_by_id3 <- summary_stats_by_id %>%
   select(Id, sum_VeryActiveDistance, sum_ModeratelyActiveDistance, sum_LightActiveDistance,
          sum_VeryActiveMinutes, sum_FairlyActiveMinutes, sum_LightlyActiveMinutes, sum_SedentaryMinutes)
@@ -538,56 +565,63 @@ str(weightLogInfo_merged)
 table(weightLogInfo_merged$Id)
 
 
-### Read in number of steps by minute, narrow merged ###
+### Read in number of steps by minute, narrow merged 
 minuteStepsNarrow_merged <- read.csv("minuteStepsNarrow_merged.csv")
 
 str(minuteStepsNarrow_merged)
 
 minuteSteps <- minuteStepsNarrow_merged %>%
-  mutate(ActivityMinute, mdy_hms(ActivityMinute))
-
-minuteSteps = subset(minuteSteps, select = -c(ActivityMinute))
-
-colnames(minuteSteps)[3] <- "ActivityMinute"
+  mutate(ActivityMinute = mdy_hms(ActivityMinute))
 
 str(minuteSteps)
 
+#minuteSteps = subset(minuteSteps, select = -c(ActivityMinute))
+
+#colnames(minuteSteps)[3] <- "ActivityMinute"
+
+str(minuteSteps)
+
+# We are only concerned about hours in the time since we will calculate steps per hour
 minuteSteps <- minuteSteps %>%
   mutate(ActivityMinute = hour(ActivityMinute))
 
 str(minuteSteps)
 
-dates2 <- hour(minuteSteps$ActivityMinute)
+# dates2 <- hour(minuteSteps$ActivityMinute)
+# 
+# head(dates2)
+# 
+# n_distinct(dates2)
+# 
+# dates <- as.POSIXct(minuteSteps$ActivityMinute, format = "%H")
+# head(dates)
+# 
+# dates <- hour(dates)
+# 
+# n_distinct(dates)
+# 
+# typeof(dates)
+# time <- format(minuteStepsNarrow_merged$ActivityMinute, format = "%H:%M:%S")
+# 
+# print(time)
+# 
+# minuteStepsNarrow_merged$time <- as.ITime(minuteStepsNarrow_merged$ActivityMinute)
+# 
+# str(minuteStepsNarrow_merged)
+# 
+# typeof(minuteSteps$ActivityMinute)
 
-head(dates2)
-
-n_distinct(dates2)
-
-dates <- as.POSIXct(minuteSteps$ActivityMinute, format = "%H")
-head(dates)
-
-dates <- hour(dates)
-
-n_distinct(dates)
-
-typeof(dates)
-#time <- format(minuteStepsNarrow_merged$ActivityMinute, format = "%H:%M:%S")
-
-print(time)
-
-minuteStepsNarrow_merged$time <- as.ITime(minuteStepsNarrow_merged$ActivityMinute)
-
-str(minuteStepsNarrow_merged)
-
-typeof(minuteSteps$ActivityMinute)
-
-#ggplot(data = minuteSteps, aes (x = ActivityMinute)) +
-#  geom_histogram(stat = "identity")+
- # facet_wrap(~Id)
+# ggplot(data = minuteSteps) +
+#   geom_histogram(mapping = aes(x = ActivityMinute))
+# 
+# ggplot(data = minuteSteps, aes (x = ActivityMinute)) +
+#   geom_histogram(stat = "identity") + 
+#   facet_wrap(~Id)
 
 #ggplot(data = minuteSteps, aes (x = ActivityMinute, y = Steps)) +
  # geom_bar()
 
+# Create new dataframe showing total steps per hour for each Id
 minuteStepsSummary <- minuteSteps %>%
   group_by(Id, ActivityMinute) %>%
   summarize(TotalSteps = sum(Steps, na.rm = TRUE))
@@ -599,10 +633,16 @@ str(minuteStepsSummary)
   #theme(axis.text.x = element_text(angle = 315)) +
   #facet_wrap(~Id)
 
+# Create a bar chart showing total steps during each hour of the day for each Id
 ggplot(data = minuteStepsSummary, aes (x = ActivityMinute, y = TotalSteps)) +
   geom_bar(stat = "identity") +
   facet_wrap(~Id)
 
+# Show step distribution in the aggregate
+ggplot(data = minuteStepsSummary) +
+  geom_col(mapping = aes(x = ActivityMinute, y = TotalSteps))
+
+# Create new data frame showing total_steps_by_hour in the aggregate
 total_steps_by_hour <- minuteSteps %>%
   group_by(ActivityMinute) %>%
   summarize(totalSteps = sum(Steps, na.rm = TRUE))
