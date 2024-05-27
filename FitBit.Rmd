@@ -1,0 +1,823 @@
+---
+title: "FitBit Project"
+author: "Norman Lew"
+date: "2024-05-22"
+output: html_document
+---
+
+# Ask
+The cofounders of Bellabeat require an analysis of how consumers use a non-Bellabeat health and fitness device to see how these usages can apply to a Bellabeat product.  What are some trends in smart device usage?  How can these trends apply to Bellabeat customers?  How can these trends influence Bellabeat’s marketing strategy?
+
+# Prepare
+The FitBit Fitness Tracker Data is a public dataset on Kaggle and made available by Mobius for unrestricted use.  33 FitBit users consented to the recording and sharing of their data.  The files consist of 29 .csv files that are in both long and wide format.  The data includes health and fitness tracking measurables like steps, heart rate, sleep quality and calories burned.  The data has very minor problems that are taken care of during the cleaning process.  Some .csv files have duplicate rows.  Other .csv files have incomplete data in their rows, or numbers that do not add up correctly across columns.  These are also taken of during the cleaning process.
+
+# Process
+### The following changes and alterations were made to the data sets before analyzing
+* Changed the ActivityDate column in the dailyActivity_merged.csv file from character to date format.
+* Created a column, sum_of_minutes, that sums all activity minutes in the dailyActivity_merged.csv file.
+* Eliminated all records in the dailyActivity_merged.csv file with 0 TotalSteps recorded.
+* Eliminated all records in the dailyActivity_merged.csv file with both greater than 0 TotalSteps recorded and 1440 SedentaryMinutes recorded.
+* Excluded SedentaryActiveDistance in the dailyActivity_merged.csv file since nearly all records are 0 or close to it.
+* Created the TotalActiveMinutes column in the dailyActivity_merged.csv file.  TotalActiveMinutes is equal to the sum of VeryActiveMinutes, FairlyActiveMinutes, and LightlyActiveMinutes.
+* Created summary statistics from the dailyActivity_merged.csv file.
+* Converted the ActivityMinute column in the minuteStepsNarrow_merged.csv file from character to date/time format.
+* Converted the ActivityMinute column in the minuteStepsNarrow_merged.csv file to show hour only (removing minutes and seconds).
+* Removed duplicate rows from the sleepDay_Merged.csv file.
+* Converted SleepDay column in the sleepDay_Merged.csv file from character to POSIXlt to Date format.
+* Added a column, sleepPercentage, to the sleepDay_Merged.csv file.
+* Created summary statistics from the sleepDay_Merged.csv file.
+* Added a column, avg_percentage_asleep_in_bed, to the sleep summary statistics.
+* Removed duplicate rows from the minuteSleep_merged.csv file.
+* Calculated sleep statistics from the minuteSleep_merged.csv file.
+
+
+## Set up environment
+Notes: Setting up environment by loading packages
+
+```{r}
+library(here)
+library(skimr)
+library(janitor)
+library(dplyr)
+library(lubridate)
+library(tidyverse)
+library(ggplot2)
+library(data.table)
+```
+# Process, Analyze, Share
+## Store the dailyActivity_merged.csv file in a dataframe and take a glance at it
+```{r}
+dailyActivity_merged <- read.csv("dailyActivity_merged.csv")
+str(dailyActivity_merged)
+head(dailyActivity_merged)
+skim_without_charts(dailyActivity_merged)
+glimpse(dailyActivity_merged)
+```
+
+There are no duplicate rows in the dailyActivity_merged dataset.
+```{r}
+nrow(distinct(dailyActivity_merged))
+```
+
+There are 33 different Ids (persons) where their activity data is provided.
+```{r}
+n_distinct(dailyActivity_merged$Id)
+```
+
+Create a dataframe showing the number of days' worth of data for each Id.
+```{r}
+number_of_days_by_id <- dailyActivity_merged %>% count(Id)
+```
+
+A bar chart showing the distribution of the number of days of data for each person
+The most number of people used a Fitbit for the entire 31 day period.
+```{r}
+ggplot(data = number_of_days_by_id) +
+  geom_bar(mapping = aes(x = n)) +
+  labs(title = "Number of Days of Data per Person",
+      x = "Number of Days",
+      y = "Number of People")
+```
+
+There are 77 records with 0 TotalSteps recorded. 
+```{r}
+sum(dailyActivity_merged$TotalSteps == 0)
+```
+
+There are 79 records with 1440 Sedentary Minutes Recorded (60 minutes X 24 hours = 1440 minutes).
+```{r}
+sum(dailyActivity_merged$SedentaryMinutes == 1440)
+```
+
+Add a column that sums all activity minutes
+```{r}
+dailyActivity_merged <- dailyActivity_merged %>% 
+  mutate(sum_of_minutes = rowSums(across(c(VeryActiveMinutes, FairlyActiveMinutes, LightlyActiveMinutes, SedentaryMinutes))))
+```
+
+
+There are 462 rows where the sum of all minutes is not equal to 1440.
+```{r}
+sum(dailyActivity_merged$sum_of_minutes != 1440)
+```
+
+There are 478 rows where the sum of all minutes is equal to 1440.
+```{r}
+sum(dailyActivity_merged$sum_of_minutes == 1440)
+```
+
+
+Create a dataframe for only those records where there was a logged activity
+```{r}
+dailyActivity_with_logged_activity <- dailyActivity_merged %>%
+  filter(LoggedActivitiesDistance > 0)
+```
+
+There are 32 rows where an activity was logged
+```{r}
+nrow(dailyActivity_with_logged_activity)
+```
+
+
+Create dataframe to show number of logged activities by Id
+```{r}
+num_logged_activity_by_id <- dailyActivity_with_logged_activity %>% count(Id)
+```
+
+Only 4 people completed logged activities, and only two people completed more than 3
+```{r}
+ggplot(data = num_logged_activity_by_id) +
+  geom_bar(mapping = aes(x = n)) +
+  labs(title = "Number of Logged Activities per Person",
+       x = "Number of Logged Activities",
+       y = "Number of People")
+```
+
+4 users logged at least one activity
+```{r}
+n_distinct(dailyActivity_with_logged_activity$Id)
+```
+
+Returning to the dailyActivity dataframe, change the ActivityDate column to date format.
+```{r}
+dailyActivity <- dailyActivity_merged %>%
+  mutate(ActivityDate = mdy(ActivityDate))
+```
+
+
+In the dailyActivity_merged file, there are days where there were 0 TotalSteps recorded for 
+a given person.  I considered whether to delete these records (cleaning).  Additionally, there are days 
+where there were 1440 minutes of SedentaryMinutes recorded, and most of these records show 0 TotalDistance and 0 TotalSteps recorded.  However, there were a handful of records where even with 1440 minutes of  SedentaryMinutes recorded, there were also TotalSteps and TotalDistance measurements that are greater than 0.
+Additionally, there are days where a very small number of steps are recorded, like, 4, 8, 9.  
+So on the issue of data cleaning, I had to consider whether to omit any of these records (those with little or activity).  For those records with no activity recorded whatsover, I can think of several posibilities as to what had occured.  Maybe they had the FitBit turned on but were not wearing it (put it on the table for the day and forgot about it).  Maybe they were bedridden and had taken no steps.
+
+The days where there is no activity recorded do not provide much useful information.  So for the analysis, I eliminate all records that have 0 TotalSteps recorded.
+```{r}
+dailyActivity <- dailyActivity %>%
+  filter(TotalSteps > 0)
+```
+
+There are now 863 records as opposed to the original 940 after we filtered out records with no recorded Steps
+```{r}
+nrow(dailyActivity)
+```
+
+As I pointed out earlier, there are some records with 1440 minutes of sedentary activity but with thousands ofsteps still being recorded.  I do not know what is going on here, but I eliminated these records as well. 
+```{r}
+dailyActivity <- dailyActivity %>%
+  filter(!(TotalSteps > 0 & SedentaryMinutes == 1440))
+```
+
+There are now 856 records as opposed to 863 records after we filtered out records with 1440 SedentaryMinutes with TotalSteps recorded greater than 0
+```{r}
+nrow(dailyActivity)
+```
+
+
+
+The number of rows with SedentaryActiveDistance equal to 0 is 774
+```{r}
+nrow(subset(dailyActivity, SedentaryActiveDistance == 0))
+```
+
+The maximum SedentaryActiveDistance is only .109999.
+```{r}
+max(dailyActivity$SedentaryActiveDistance)
+```
+
+As most SedentaryActiveDistance entries are equal to zero, as they should be, and with the rest
+being of insignificant value, though they should be zero as well, I am excluding SedentaryActiveDistance
+in calculations and visualizations altogether.
+
+Create a new column with total active minutes recorded.  These are all Active Minutes, but not SedentaryMinutes.
+```{r}
+dailyActivity <- dailyActivity %>%
+  mutate(TotalActiveMinutes = VeryActiveMinutes + FairlyActiveMinutes + LightlyActiveMinutes)
+```
+
+Create a new data frame with summary stats from the dailyActivity dataframe
+```{r}
+summary_stats_by_id <- dailyActivity %>%
+  group_by(Id) %>%
+  summarize(mean_TotalSteps = mean(TotalSteps, na.rm = TRUE),
+            min_TotalSteps = min(TotalSteps, na.rm = TRUE),
+            max_TotalSteps = max(TotalSteps, na.rm = TRUE),
+            sum_TotalSteps = sum(TotalSteps, na.rm = TRUE),
+            mean_TotalDistance = mean(TotalDistance, na.rm = TRUE),
+            min_TotalDistance = min(TotalDistance, na.rm = TRUE),
+            max_TotalDistance = max(TotalDistance, na.rm = TRUE),
+            sum_TotalDistance = sum(TotalDistance , na.rm = TRUE),
+            mean_VeryActiveDistance = mean(VeryActiveDistance, na.rm = TRUE),
+            max_VeryActiveDistance = max(VeryActiveDistance, na.rm = TRUE),
+            min_VeryActiveDistance = min(VeryActiveDistance, na.rm = TRUE),
+            sum_VeryActiveDistance = sum(VeryActiveDistance, na.rm = TRUE),
+            mean_ModeratelyActiveDistance = mean(ModeratelyActiveDistance, na.rm = TRUE),
+            max_ModeratelyActiveDistance = max(ModeratelyActiveDistance, na.rm = TRUE),
+            min_ModeratelyActiveDistance = min(ModeratelyActiveDistance, na.rm = TRUE),
+            sum_ModeratelyActiveDistance = sum(ModeratelyActiveDistance, na.rm = TRUE),
+            mean_LightActiveDistance = mean(LightActiveDistance, na.rm = TRUE),
+            max_LightActiveDistance = max(LightActiveDistance, na.rm = TRUE),
+            min_LightActiveDistance = min(LightActiveDistance, na.rm = TRUE),
+            sum_LightActiveDistance = sum(LightActiveDistance, na.rm = TRUE),
+            sum_TotalActiveMinutes = sum(TotalActiveMinutes, na.rm = TRUE),
+            mean_VeryActiveMinutes = mean(VeryActiveMinutes, na.rm = TRUE),
+            max_VeryActiveMinutes = max(VeryActiveMinutes, na.rm = TRUE),
+            min_VeryActiveMinutes = min(VeryActiveMinutes, na.rm = TRUE),
+            sum_VeryActiveMinutes = sum(VeryActiveMinutes, na.rm = TRUE),
+            mean_FairlyActiveMinutes = mean(FairlyActiveMinutes, na.rm = TRUE),
+            max_FairlyActiveMinutes = max(FairlyActiveMinutes, na.rm = TRUE),
+            min_FairlyActiveMinutes = min(FairlyActiveMinutes, na.rm = TRUE),
+            sum_FairlyActiveMinutes = sum(FairlyActiveMinutes, na.rm = TRUE),
+            mean_LightlyActiveMinutes = mean(LightlyActiveMinutes, na.rm = TRUE),
+            max_LightlyActiveMinutes = max(LightlyActiveMinutes, na.rm = TRUE),
+            min_LightlyActiveMinutes = min(LightlyActiveMinutes, na.rm = TRUE),
+            sum_LightlyActiveMinutes = sum(LightlyActiveMinutes, na.rm = TRUE),
+            mean_SedentaryMinutes = mean(SedentaryMinutes, na.rm = TRUE),
+            max_SedentaryMinutes = max(SedentaryMinutes, na.rm = TRUE),
+            min_SedentaryMinutes = min(SedentaryMinutes, na.rm = TRUE),
+            sum_SedentaryMinutes = sum(SedentaryMinutes, na.rm = TRUE),
+            mean_calories = mean(Calories, na.rm = TRUE),
+            min_calories = min(Calories, na.rm = TRUE),
+            max_calories = max(Calories, na.rm = TRUE),
+            sum_calories = sum(Calories, na.rm = TRUE))
+```
+
+Read in number of steps by minute, narrow merged 
+```{r}
+minuteStepsNarrow_merged <- read.csv("minuteStepsNarrow_merged.csv")
+```
+
+There are 1325580 rows in the minuteStepsNarrow_merged dataframe
+```{r}
+nrow(minuteStepsNarrow_merged)
+```
+
+There are no duplicate rows in the minuteStepsNarrow_merged dataframe
+```{r}
+nrow(distinct(minuteStepsNarrow_merged))
+```
+
+
+Convert ActivityMinute column in minuteSteps dataframe from character to date/time
+```{r}
+minuteSteps <- minuteStepsNarrow_merged %>%
+  mutate(ActivityMinute = mdy_hms(ActivityMinute))
+```
+
+Only show the hour in the ActivityMinute column in minuteSteps dataframe.  Rename the column to
+Hour.
+```{r}
+minuteSteps <- minuteSteps %>%
+  mutate(ActivityMinute = hour(ActivityMinute))
+minuteSteps <- minuteSteps %>%
+  rename(Hour = ActivityMinute)
+```
+
+Create a new dataframe that shows TotalSteps per hour for each Id
+```{r}
+minuteStepsSummary <- minuteSteps %>%
+  group_by(Id, Hour) %>%
+  summarize(TotalSteps = sum(Steps, na.rm = TRUE))
+```
+
+
+Show the aggregate number of steps taken during each hour of the day.
+As we can see, most steps are taken between late morning and evening.  Lesser steps
+are taken during sleeping hours.
+```{r}
+ggplot(data = minuteStepsSummary) +
+  geom_col(mapping = aes(x = Hour, y = TotalSteps)) +
+  labs (title = "Total Steps Taken By Hour")
+```
+
+Create a bar chart showing total steps during each hour of the day for each Id.
+```{r}
+ggplot(data = minuteStepsSummary, aes (x = Hour, y = TotalSteps)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Steps Taken By Hour",
+       subtitle = "Per Id") +
+  facet_wrap(~Id)
+```
+
+
+A histogram of the average number of steps per day.
+As we can see, more people take between 6000 and 10000 steps per day.
+There are 7 who take more than 10000, an oft cited number of recommended
+steps per day. 
+```{r}
+result <- hist(summary_stats_by_id$mean_TotalSteps,
+               main = "Average Number of Steps Per Day",
+               xlab = "Average Steps Per Day",
+               ylab = "Number of People",
+               col = "Purple")
+```
+
+A histogram of the mean total distance by Id.
+Most people walk between 2 and 8 miles a day.
+```{r}
+result <- hist(summary_stats_by_id$mean_TotalDistance,
+               main = "Average Distance Per Day",
+               xlab = "Average Distance (miles)",
+               ylab = "Number of People",
+               col = "Magenta")
+```
+
+A histogram of the mean calories burned per day by Id.
+Most people burn between 1500 and 3000 calories per day.
+```{r}
+result <- hist(summary_stats_by_id$mean_calories,
+               main = "Average Calories Burned Per Day",
+               xlab = "Average Calories",
+               ylab = "Number of People",
+               col = "Green")
+```
+
+
+Here is a more granular histogram for the average number of calories burned per Id
+```{r}
+ggplot(data = summary_stats_by_id) +
+  geom_histogram(mapping = aes(x = mean_calories )) +
+  labs(title = "Average Calories Burned Per Day",
+       subtitle = "Per Id",
+       x = "Calories Burned Per Day",
+       y = "Number of People")
+```
+
+
+
+Create a new dataframe from the summary_stats_by_id dataframe that will be used to show visualizations based on distance and activity
+```{r}
+summary_stats_by_id3 <- summary_stats_by_id %>%
+  select(Id, sum_VeryActiveDistance, sum_ModeratelyActiveDistance, sum_LightActiveDistance,
+         sum_VeryActiveMinutes, sum_FairlyActiveMinutes, sum_LightlyActiveMinutes, sum_SedentaryMinutes)
+```
+
+Create columns that show the percentage spent in each distance type and activity
+```{r}
+summary_stats_by_id3 <- summary_stats_by_id3 %>%
+  mutate(percent_VeryActiveDistance = sum_VeryActiveDistance /
+           (sum_VeryActiveDistance + sum_ModeratelyActiveDistance + sum_LightActiveDistance),
+         percent_ModeratelyActiveDistance = sum_ModeratelyActiveDistance /
+           (sum_VeryActiveDistance + sum_ModeratelyActiveDistance + sum_LightActiveDistance),
+         percent_LightActiveDistance = sum_LightActiveDistance /
+           (sum_VeryActiveDistance + sum_ModeratelyActiveDistance + sum_LightActiveDistance),
+         percent_VeryActiveMinutes = sum_VeryActiveMinutes  /
+           (sum_VeryActiveMinutes + sum_FairlyActiveMinutes + sum_LightlyActiveMinutes +
+              sum_SedentaryMinutes),
+         percent_FairlyActiveMinutes = sum_FairlyActiveMinutes  /
+           (sum_VeryActiveMinutes + sum_FairlyActiveMinutes + sum_LightlyActiveMinutes +
+              sum_SedentaryMinutes),
+         percent_LightlyActiveMinutes = sum_LightlyActiveMinutes  /
+           (sum_VeryActiveMinutes + sum_FairlyActiveMinutes + sum_LightlyActiveMinutes +
+              sum_SedentaryMinutes),
+         percent_SedentaryMinutes = sum_SedentaryMinutes  /
+           (sum_VeryActiveMinutes + sum_FairlyActiveMinutes + sum_LightlyActiveMinutes +
+              sum_SedentaryMinutes)
+         )
+```
+
+```{r}
+summary_stats_by_id3 <- summary_stats_by_id3 %>%
+  select(Id, percent_VeryActiveDistance, percent_ModeratelyActiveDistance,percent_LightActiveDistance,
+         percent_VeryActiveMinutes, percent_FairlyActiveMinutes, percent_LightlyActiveMinutes,
+         percent_SedentaryMinutes)
+
+distance_percentage_by_id3_long <- gather(summary_stats_by_id3, distance_category, percentage_distance,
+                                    percent_VeryActiveDistance:percent_LightActiveDistance)
+
+distance_percentage_by_id3_long <- distance_percentage_by_id3_long %>%
+  select(Id, distance_category, percentage_distance)
+
+activity_percentage_by_id3_long <- gather(summary_stats_by_id3, activity_category, percentage_activity,
+                                    percent_VeryActiveMinutes:percent_SedentaryMinutes)
+
+activity_percentage_by_id3_long <- activity_percentage_by_id3_long %>%
+  select(Id, activity_category, percentage_activity)
+
+distance_percentage_by_id3_long <- distance_percentage_by_id3_long %>%
+  mutate(distance_category = recode(distance_category, percent_VeryActiveDistance = 'Very',
+                                    percent_ModeratelyActiveDistance = 'Moderately',
+                                    percent_LightActiveDistance =  'Lightly'))
+
+activity_percentage_by_id3_long <- activity_percentage_by_id3_long %>%
+  mutate(activity_category = recode(activity_category, percent_VeryActiveMinutes = 'Very',
+                                    percent_FairlyActiveMinutes = 'Fairly',
+                                    percent_LightlyActiveMinutes =  'Lightly',
+                                    percent_SedentaryMinutes = "Sedentary"))
+```
+
+For each Id, plot the percentage spent in each distance category.
+The majority of people have their highest percentage in the Lightly distance category .
+And interestingly, a handful of people have their highest percentage in the Very category.
+```{r}
+ggplot(data = distance_percentage_by_id3_long, aes (x = distance_category, y = percentage_distance)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 270)) +
+  labs(title = "Percentage Spent in Each Distance Category",
+       subtitle = "Per Id",
+       x = "Distance Category",
+       y = "Percentage") +
+  facet_wrap(~Id)
+```
+
+For each Id, plot the percentage spent in each activity category.
+As expected, everyone spent the most amount of time in the Sedentary category.
+```{r}
+ggplot(data = activity_percentage_by_id3_long, aes (x = activity_category, y = percentage_activity)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 270)) +
+  labs(title = "Percentage Spent in Each Activity Category",
+       subtitle = "Per Id",
+       x = "Activity",
+       y = "Percentage") +
+  facet_wrap(~Id)
+```
+
+Put summary_stats_by_id activity distances into long format.
+```{r}
+summary_stats_by_id2 <- select(summary_stats_by_id, Id, mean_VeryActiveDistance, mean_ModeratelyActiveDistance, mean_LightActiveDistance)
+summary_stats_by_id2 <- gather(summary_stats_by_id2,activity, average, mean_VeryActiveDistance:mean_LightActiveDistance)
+summary_stats_by_id2 <- summary_stats_by_id2 %>%
+  mutate(activity = recode(activity, mean_VeryActiveDistance = 'Very', mean_ModeratelyActiveDistance = 'Moderate', mean_LightActiveDistance =  'Light' ))
+```
+
+Plot the histogram, for each Id, the average distances walked in each distance category.
+The plots look similar to the bar graphs that showed the breakdown of percentage of total time spent
+in each distance category, as it should.
+As expected, most people spent the majority of their distance activity in the Light category.
+Interestingly, a few spent the majority of the distance activity in the Very category.
+```{r}
+ggplot(data = summary_stats_by_id2, aes (x = activity, y = average)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 270)) +
+  labs(title = "Average Distances Spent in Each Distance Category",
+       subtitle = "Per Id",
+       x = "Activity Category",
+       y = "Average Distance") +
+  facet_wrap(~Id)
+```
+
+Scatter plot showing the relationship between totalsteps taken and total distance travelled
+As we can see, the more steps taken, the greater the total distance travelled.
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = TotalSteps, y = TotalDistance)) +
+  labs("title" = "Total Steps vs Total Distance",
+       x = "Total Steps",
+       y = "Total Distance")
+```
+
+The scatter plot for TotalSteps vs TotalDistance for each Id
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = TotalSteps, y = TotalDistance)) +
+  labs("title" = "Total Steps vs Total Distance",
+       subtitle = "Per Id",
+       x = "Total Steps",
+       y = "Total Distance") + 
+  facet_wrap(~Id)
+```
+
+Plot the relationship between TotalSteps taken and Calories burned.
+There is a positive correlation between TotalSteps taken and Calories burned.
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = TotalSteps, y = Calories)) +
+  labs("title" = "Total Steps vs Total Calories",
+       x = "Total Steps",
+       y = "Calories")
+```
+
+
+Plot the relation between TotalSteps taken and Calories burned for each Id
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = TotalSteps, y = Calories)) +
+  labs("title" = "Total Steps vs Total Calories",
+       subtitle = "Per Id",
+       x = "Total Steps",
+       y = "Calories") +
+  facet_wrap(~Id)
+```
+
+Plot the relationship between TotalDistance and  Calories burned.
+As we can see, as the Total Distance goes up, so does Calories burned.
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = TotalDistance, y = Calories)) +
+  labs(title = "Total Distance vs Total Calories",
+       x = "Total Distance",
+       y = "Calories")
+```
+
+
+Plot the relationship between TotalDistance and  Calories burned for each Id
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = TotalDistance, y = Calories)) +
+  labs(title = "Total Distance vs Total Calories", 
+       subtitle = "Per Id",
+       x = "Total Distance",
+       y = "Calories") +
+  facet_wrap(~Id)
+```
+
+
+Plot the relationship between SedentaryMinutes and Calories burned.
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = SedentaryMinutes, y = Calories)) +
+  labs(title = "Sedentary Minutes vs Calories",
+       x = "Sedentary Minutes",
+       y = "Calories")
+```
+
+
+Plot the relationship between VeryActiveMinutes and Calories burned
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = VeryActiveMinutes, y = Calories)) +
+  labs(title = "Very Active Minutes vs Calories",
+       x = "Very Active Minutes",
+       y = "Calories")
+```
+
+Plot the relationship between VeryActiveMinutes and VeryActiveDistance.
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = VeryActiveMinutes, y = VeryActiveDistance)) +
+  labs(title = "Very Active Minutes vs Very Active Distance",
+       x = "Very Active Minutes",
+       y = "Very Active Distance")
+```
+
+Plot the relationship between FairlyActiveMinutes and ModeratelyActiveDistance.
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = FairlyActiveMinutes, y = ModeratelyActiveDistance)) +
+  labs(title = "Fairly Active Minutes vs Moderately Active Distance",
+       x = "Fairly Active Minutes",
+       y = "Moderately Active Distance")
+```
+
+Plot the relationship between LightlyActiveMinutes and LightActiveDistance.
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = LightlyActiveMinutes, y = LightActiveDistance)) +
+  labs(title = "Lightly Active Minutes vs Light Active Distance",
+       x = "Lightly Active Minutes",
+       y = "Lightly Active Distance")
+```
+
+
+Plot the relationship between TotalSteps and SedentaryMinutes
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = TotalSteps, y = SedentaryMinutes)) +
+  labs(title = "Total Steps vs Sedentary Minutes",
+       x = "Total Steps",
+       y = "Sedentary Minutes")
+```
+
+Plot the relationship between TotalDistance and SedentaryMinutes
+```{r}
+ggplot(data = dailyActivity) +
+  geom_point(mapping = aes(x = TotalDistance, y = SedentaryMinutes)) +
+  labs(title = "Total Distance vs Sedentary Minutes",
+       x = "Total Distance",
+       y = "Sedentary Minutes")
+```
+
+
+Plot the relationship between the sum_TotalSteps and sum_calories.
+```{r}
+ggplot(data = summary_stats_by_id) +
+  geom_point(mapping = aes(x = sum_TotalSteps, y = sum_calories)) +
+  labs(title = "Sum of Total Steps vs Sum of Total Calories",
+       x = "Sum of Total Steps",
+       y = "Sum of Total Calories")
+```
+
+Plot the relationship between sum_TotalDistance and sum_calories
+```{r}
+ggplot(data = summary_stats_by_id) +
+  geom_point(mapping = aes(x = sum_TotalDistance, y = sum_calories)) +
+  labs(title = "Sum of Total Distance vs Sum of Total Calories",
+       x = "Sum of Total Distance",
+       y = "Sum of Total Calories")
+```
+
+# Sleep
+
+Store the sleepDay_Merged.csv file in a dataframe
+```{r}
+sleepDay_merged <- read.csv("sleepDay_Merged.csv")
+```
+
+There are 413 rows in the sleepDay_merged dataframe
+```{r}
+nrow(sleepDay_merged)
+```
+
+# There are 410 distinct rows in the sleepDay_merged dataframe
+```{r}
+nrow(distinct(sleepDay_merged))
+```
+
+
+Remove duplicate rows from the sleepDay_merged dataframe.
+There are now 410 rows in the sleepDay_merged data frame.
+```{r}
+sleepDay_merged <- unique(sleepDay_merged)
+nrow(sleepDay_merged)
+```
+
+
+Convert character representation of date and time to POSIXlt, then to Date format
+```{r}
+sleepDay_merged <- sleepDay_merged %>% 
+  mutate(SleepDay = strptime(SleepDay, "%m/%d/%Y %H:%M:%S"))
+sleepDay_merged <- sleepDay_merged %>% 
+  mutate(SleepDay = as.Date(SleepDay))
+```
+
+Add a column calculating sleep percentage
+```{r}
+sleepDay_merged <- sleepDay_merged %>% 
+  mutate(sleepPercentage = TotalMinutesAsleep / TotalTimeInBed)
+```
+
+Create a new dataframe that shows summary stats per Id
+```{r}
+sleep_stats_by_id <- sleepDay_merged %>%
+  group_by(Id) %>%
+  summarize(
+            sum_TotalSleepRecords = sum(TotalSleepRecords, na.rm = TRUE),
+            mean_TotalMinutesAsleep = mean(TotalMinutesAsleep, na.rm = TRUE),
+            min_TotalMinutesAsleep = min(TotalMinutesAsleep, na.rm = TRUE),
+            max_TotalMinutesAsleep = max(TotalMinutesAsleep, na.rm = TRUE),
+            sum_TotalMinutesAsleep = sum(TotalMinutesAsleep , na.rm = TRUE),
+            mean_TotalTimeInBed  = mean(TotalTimeInBed, na.rm = TRUE),
+            max_TotalTimeInBed  = max(TotalTimeInBed, na.rm = TRUE),
+            min_TotalTimeInBed  = min(TotalTimeInBed , na.rm = TRUE),
+            sum_TotalTimeInBed  = sum(TotalTimeInBed , na.rm = TRUE),
+            )
+```
+
+Add a column for avg_percentage_asleep_in_bed
+```{r}
+sleep_stats_by_id <- sleep_stats_by_id %>%
+  mutate(percentage_asleep_in_bed = sum_TotalMinutesAsleep / sum_TotalTimeInBed)
+```
+
+A plot of the percentage of time asleep while in bed.
+```{r}
+ggplot(sleep_stats_by_id) +
+  geom_histogram(mapping = aes(x = percentage_asleep_in_bed)) +
+  labs(title = "Percentage of Time Asleep While in Bed",
+       x = "Percentage of Time",
+       y = "Number of People")
+```
+
+Another histogram for a count of the percentage of time asleep while in bed.
+Most people spend 80% or more of the time in bed asleep.
+```{r}
+result <- hist(sleep_stats_by_id$percentage_asleep_in_bed,
+               main = "Proportion of Time Asleep While In Bed",
+               xlab = "Percentage of Time Asleep",
+               ylab = "Number of People",
+               col = "Cyan")
+```
+
+
+Create a dataframe for minuteSleep_merged.csv
+```{r}
+minuteSleep_merged <- read.csv("minuteSleep_merged.csv")
+```
+
+There are 188521 rows in the dataframe.
+```{r}
+nrow(minuteSleep_merged)
+```
+
+
+There are 187978 distinct rows in the dataframe.
+```{r}
+nrow(distinct(minuteSleep_merged))
+```
+
+Remove duplicates from the minuteSleep_merged dataframe
+```{r}
+minuteSleep_merged <- unique(minuteSleep_merged)
+nrow(minuteSleep_merged)
+```
+
+Create a new dataframe with calculations showing percentage spent in each sleep stage
+```{r}
+# Calculate percentage spent in each sleep stage for each Id
+minuteSleep_stats <- minuteSleep_merged %>%
+  group_by(Id) %>% 
+  summarize(sum_stage1 = sum(value == 1), 
+            sum_stage2 = sum(value == 2),
+            sum_stage3 = sum(value == 3))
+minuteSleep_stats <- minuteSleep_stats %>% 
+  mutate(percentage_stage1 = sum_stage1 / (sum_stage1 + sum_stage2 + sum_stage3),
+         percentage_stage2 = sum_stage2 / (sum_stage1 + sum_stage2 + sum_stage3),
+         percentage_stage3 = sum_stage3 / (sum_stage1 + sum_stage2 + sum_stage3))
+```
+  
+Show breakdown of minutes spent in each sleep stage 
+```{r}
+minuteSleep_stats_long2 <- gather(minuteSleep_stats, stage, num_minutes, sum_stage1:sum_stage3)
+
+minuteSleep_stats_long2 <- minuteSleep_stats_long2 %>% 
+  select(Id, num_minutes, stage)
+
+minuteSleep_stats_long2 <- minuteSleep_stats_long2 %>%
+  mutate(stage = recode(stage, sum_stage1 = 'Stage_1', sum_stage2 = 'Stage_2', sum_stage3 =  'Stage_3' ))
+```
+  
+Plot breakdown of time in each sleep stage for each Id.
+As we can see, everyone spends the majority of their time in the first (lightest) sleep stage.
+```{r}
+ggplot(data = minuteSleep_stats_long2, aes (x = stage, y = num_minutes)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 270)) +
+  labs(title = "Number of Minutes Spent in Each Sleep Stage",
+       subtitle = "Per Id",
+       x = "Stage",
+       y = "Number of Minutes") +
+  facet_wrap(~Id)
+```
+  
+A breakdown of aggregate time in each sleep stage
+```{r}
+ggplot(data = minuteSleep_stats_long2) +
+  geom_col(mapping = aes(x = stage, y = num_minutes)) +
+  labs(title = "Number of Minutes Spent in Each Sleep Stage",
+       subtitle = "Per Id",
+       x = "Stage",
+       y = "Number of Minutes")
+```
+  
+Show  breakdown of percentage of time spent in each sleep stage 
+```{r}
+minuteSleep_stats_percentages_long <- gather(minuteSleep_stats, stage, percentage, percentage_stage1:percentage_stage3)
+
+minuteSleep_stats_percentages_long <- minuteSleep_stats_percentages_long %>%
+  select(Id, stage, percentage)
+
+minuteSleep_stats_percentages_long <- minuteSleep_stats_percentages_long %>%
+  mutate(stage = recode(stage, percentage_stage1 = 'Stage_1', percentage_stage2 = 'Stage_2', percentage_stage3 =  'Stage_3'))
+```
+  
+  
+
+Plot breakdown of percentage of time spent in each sleep stage by Id.
+As we can see, the percentage of time spent in each sleep stage is similar to that of the actual time
+spent in each sleep stage.
+```{r}
+ggplot(data = minuteSleep_stats_percentages_long, aes (x = stage, y = percentage)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 270)) +
+  labs(title = "Percentage of Time Spent in Each Sleep Stage",
+       subtitle = "Per Id",
+       x = "Stage",
+       y = "Percentage of Time") +
+  facet_wrap(~Id)
+```
+
+
+# Weight
+
+Read in weightLogInfo_merged.csv to a dataframe.
+```{r}
+weightLogInfo_merged <- read.csv("weightLogInfo_merged.csv")
+```
+
+There are 67 records in the weightLogInfo_merged dataframe.
+```{r}
+nrow(weightLogInfo_merged)
+```
+
+
+There are no duplicate rows in the weightLogInfo_merged dataframe.
+```{r}
+nrow(distinct(weightLogInfo_merged))
+```
+
+.
+```{r}
+n_distinct(weightLogInfo_merged$Id)
+```
+
+Number of times each person recorded their weight.
+As we can see, only two people recorded their weight regularly.
+```{r}
+weightLog_count <- table(weightLogInfo_merged$Id)
+weightLog_count
+```
+
+
+
+# Act
